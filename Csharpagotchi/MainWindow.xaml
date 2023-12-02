@@ -5,7 +5,13 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Csharpagotchi"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="Csharpagotchi" 
+        Height="450" 
+        Width="800"
+        WindowStyle="None" 
+        AllowsTransparency="True"
+        Background="Aquamarine"
+        ShowInTaskbar="False">
     <Grid>
         
     </Grid>

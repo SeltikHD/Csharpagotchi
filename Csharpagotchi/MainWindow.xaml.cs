@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace Csharpagotchi
@@ -55,6 +56,17 @@ namespace Csharpagotchi
         {
             InitializeComponent();
 
+            // Obtém as dimensões da tela principal
+            double screenWidth = SystemParameters.PrimaryScreenWidth;
+            double screenHeight = SystemParameters.PrimaryScreenHeight;
+
+            // Define o tamanho da janela para ocupar toda a tela
+            Width = screenWidth;
+            Height = screenHeight;
+
+            // Define a posição inicial da janela como centralizada
+            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+
             // Inicializa o DispatcherTimer
             gameTimer = new DispatcherTimer
             {
@@ -62,6 +74,30 @@ namespace Csharpagotchi
             };
             gameTimer.Tick += GameLoop; // Define o método a ser chamado a cada tick
             gameTimer.Start(); // Inicia o temporizador
+        }
+
+        private List<Entity> entities = new List<Entity>(); // Lista para armazenar os slimes massas
+
+        // Método para criar e adicionar um Slime à lista de entidades
+        private void SpawnSlime(double mouseX, double mouseY)
+        {
+            Entity slime = new Entity(); // Cria uma nova entidade (Slime)
+
+            // Adiciona componentes à entidade
+            slime.Components.Add(new PositionComponent { X = mouseX, Y = mouseY });
+            slime.Components.Add(new VelocityComponent { SpeedX = 0, SpeedY = 0 });
+
+            // Adiciona o Slime à lista de entidades
+            entities.Add(slime);
+        }
+
+        private void OnMouseClick(object sender, MouseButtonEventArgs e)
+        {
+            // Obtém a posição atual do cursor do mouse
+            Point mousePosition = e.GetPosition(this);
+
+            // "Spawna" um Slime na posição do cursor do mouse
+            SpawnSlime(mousePosition.X, mousePosition.Y);
         }
 
         private void GameLoop(object sender, EventArgs e)

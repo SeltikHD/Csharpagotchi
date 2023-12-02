@@ -10,9 +10,9 @@
         Width="800"
         WindowStyle="None" 
         AllowsTransparency="True"
-        Background="Aquamarine"
+        Background="Transparent"
         ShowInTaskbar="False">
-    <Grid>
+    <Canvas>
         
-    </Grid>
+    </Canvas>
 </Window>

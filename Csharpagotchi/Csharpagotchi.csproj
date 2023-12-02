@@ -95,12 +95,26 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="1.png" />
-    <Resource Include="ai-blob-default.png" />
-    <Resource Include="shadow-ai-blob.png" />
-    <Resource Include="walk100.gif" />
-    <Resource Include="walk150.gif" />
-    <Resource Include="walk50.gif" />
+    <Resource Include="assets\slime\sprites\shadow.png" />
+    <Resource Include="assets\slime\sprites\walk100.gif" />
+    <Resource Include="assets\slime\sprites\walk150.gif" />
+    <Resource Include="assets\slime\sprites\walk50.gif" />
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <Resource Include="assets\slime\sprites\default.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="assets\slime\sounds\slime1.wav" />
+    <Content Include="assets\slime\sounds\slime10.wav" />
+    <Content Include="assets\slime\sounds\slime2.wav" />
+    <Content Include="assets\slime\sounds\slime3.wav" />
+    <Content Include="assets\slime\sounds\slime4.wav" />
+    <Content Include="assets\slime\sounds\slime5.wav" />
+    <Content Include="assets\slime\sounds\slime6.wav" />
+    <Content Include="assets\slime\sounds\slime7.wav" />
+    <Content Include="assets\slime\sounds\slime8.wav" />
+    <Content Include="assets\slime\sounds\slime9.wav" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

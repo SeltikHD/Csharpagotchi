@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 
@@ -20,11 +21,31 @@ namespace Csharpagotchi
         public double SpeedY { get; set; }
     }
 
+    public class SpriteComponent
+    {
+        public Uri Sprite { get; set; }
+        public UIElement UIElement { get; set; }
+    }
+
     // Entidade
     public class Entity
     {
         public List<object> Components { get; set; } = new List<object>();
     }
+
+    public class EntityFactory
+    {
+        public Entity CreateSlime(double x, double y)
+        {
+            Entity slime = new Entity();
+
+            slime.Components.Add(new PositionComponent { X = x, Y = y });
+            slime.Components.Add(new VelocityComponent { SpeedX = 0, SpeedY = 0 });
+            slime.Components.Add(new SpriteComponent { Sprite = new Uri("../assets/slime/default.png", UriKind.Relative), UIElement = new Image() });
+
+            return slime;
+        }
+    }   
 
     // Sistema
     public class MovementSystem
@@ -39,11 +60,44 @@ namespace Csharpagotchi
                     positionComponent.X += velocityComponent.SpeedX;
                     positionComponent.Y += velocityComponent.SpeedY;
 
+                    // Tocar audio de movimento
+
+
                     // Aqui você poderia adicionar lógica de colisão, limites da tela, etc.
                 }
             }
         }
     }
+
+    public class RenderingSystem
+    {
+        public void Start(List<Entity> entities, Canvas canvas)
+        {
+            foreach (var entity in entities)
+            {
+                if (entity.Components.FirstOrDefault(c => c is SpriteComponent) is SpriteComponent spriteComponent)
+                {
+                    // Adiciona o sprite ao canvas
+                    canvas.Children.Add(spriteComponent.UIElement);
+                }
+            }
+        }
+
+        public void Update(List<Entity> entities)
+        {
+            foreach (var entity in entities)
+            {
+                if (entity.Components.FirstOrDefault(c => c is PositionComponent) is PositionComponent positionComponent && entity.Components.FirstOrDefault(c => c is SpriteComponent) is SpriteComponent spriteComponent)
+                {
+                    // Pega a posição do componente e atualiza a posição do sprite
+                    Canvas.SetLeft(spriteComponent.UIElement, positionComponent.X);
+                    Canvas.SetTop(spriteComponent.UIElement, positionComponent.Y);
+
+                    // Aqui você poderia adicionar lógica de animação, etc.
+                }
+            }
+        }
+    }   
 
     /// <summary>
     /// Interação lógica para MainWindow.xam
@@ -66,6 +120,8 @@ namespace Csharpagotchi
 
             // Define a posição inicial da janela como centralizada
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            WindowState = WindowState.Maximized;
+            Topmost = true;
 
             // Inicializa o DispatcherTimer
             gameTimer = new DispatcherTimer
@@ -76,20 +132,8 @@ namespace Csharpagotchi
             gameTimer.Start(); // Inicia o temporizador
         }
 
-        private List<Entity> entities = new List<Entity>(); // Lista para armazenar os slimes massas
-
-        // Método para criar e adicionar um Slime à lista de entidades
-        private void SpawnSlime(double mouseX, double mouseY)
-        {
-            Entity slime = new Entity(); // Cria uma nova entidade (Slime)
-
-            // Adiciona componentes à entidade
-            slime.Components.Add(new PositionComponent { X = mouseX, Y = mouseY });
-            slime.Components.Add(new VelocityComponent { SpeedX = 0, SpeedY = 0 });
-
-            // Adiciona o Slime à lista de entidades
-            entities.Add(slime);
-        }
+        private readonly List<Entity> entities = new List<Entity>(); // Lista para armazenar os slimes massas
+        private readonly EntityFactory entityFactory = new EntityFactory(); // Fábrica de entidades
 
         private void OnMouseClick(object sender, MouseButtonEventArgs e)
         {
@@ -97,7 +141,7 @@ namespace Csharpagotchi
             Point mousePosition = e.GetPosition(this);
 
             // "Spawna" um Slime na posição do cursor do mouse
-            SpawnSlime(mousePosition.X, mousePosition.Y);
+            entities.Add(entityFactory.CreateSlime(mousePosition.X, mousePosition.Y));
         }
 
         private void GameLoop(object sender, EventArgs e)

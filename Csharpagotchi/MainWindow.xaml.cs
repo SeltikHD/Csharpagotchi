@@ -1,10 +1,12 @@
 ﻿using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using System.Windows.Media;
 
 namespace Csharpagotchi
 {
@@ -25,6 +27,33 @@ namespace Csharpagotchi
     {
         public Uri Sprite { get; set; }
         public UIElement UIElement { get; set; }
+    }
+
+    // Classe para o áudio
+    public class AudioManager
+    {
+        private readonly MediaPlayer mediaPlayer = new MediaPlayer();
+        private readonly Random random = new Random();
+
+        public void PlayRandomSound(string folderPath)
+        {
+            // Obtém a lista de arquivos de áudio na pasta
+            string[] audioFiles = Directory.GetFiles(folderPath, "../assets/slime/sounds/*.wav");
+
+            if (audioFiles.Length > 0)
+            {
+                // Escolhe aleatoriamente um arquivo de áudio
+                int randomIndex = random.Next(audioFiles.Length);
+                string randomAudioFile = audioFiles[randomIndex];
+
+                // Define o caminho do arquivo de áudio no MediaPlayer
+                mediaPlayer.Open(new Uri(randomAudioFile, UriKind.RelativeOrAbsolute));
+
+                // Reproduz o áudio
+                mediaPlayer.Play();
+            }
+            // Se não houver arquivos de áudio na pasta, não faz nada
+        }
     }
 
     // Entidade
@@ -50,6 +79,8 @@ namespace Csharpagotchi
     // Sistema
     public class MovementSystem
     {
+        private readonly AudioManager audioManager = new AudioManager();
+        
         public void Update(List<Entity> entities)
         {
             foreach (var entity in entities)
@@ -61,7 +92,7 @@ namespace Csharpagotchi
                     positionComponent.Y += velocityComponent.SpeedY;
 
                     // Tocar audio de movimento
-
+                    audioManager.PlayRandomSound("../assets/slime/sounds/");
 
                     // Aqui você poderia adicionar lógica de colisão, limites da tela, etc.
                 }

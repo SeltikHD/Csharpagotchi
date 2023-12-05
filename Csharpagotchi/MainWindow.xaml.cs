@@ -13,68 +13,31 @@ using WpfAnimatedGif;
 namespace Csharpagotchi
 {
     // Componentes
-    public class PositionComponent
-    {
-        public double X { get; set; }
-        public double Y { get; set; }
-    }
 
-    public class VelocityComponent
+    public class MovementComponent
     {
-        public double SpeedX { get; set; }
-        public double SpeedY { get; set; }
+        public Vector Position { get; set; } = new Vector(0, 0);
+        public Vector Speed { get; set; } = new Vector(0, 0);
         public double DistanceToChangeDirection { get; set; }
+        public int SecondsToChangeDirection { get; set; }
+        public bool IsMoving { get; set; } = false;
     }
 
     public class SpriteComponent
     {
         // Objeto contendo as Uri dos sprites do personagem parado e andando
-        public Uri Sprite { get; set; }
+        public Uri IdleSprite { get; set; }
+        public BitmapImage IdleSpriteBitmap { get; set; }
+        public Uri WalkSprite { get; set; }
+        public BitmapImage WalkSpriteBitmap { get; set; }
         public Image Image { get; set; }
-        public bool IsMoving { get; set; }
-        public bool PreviousIsMoving { get; set; }
+        public bool PreviousIsMoving { get; set; } = false;
     }
 
-    // Classe para o áudio
-    public class AudioManager
+    public class AudioComponent
     {
-        public readonly MediaPlayer mediaPlayer = new MediaPlayer();
-        private readonly Random random = new Random();
-
-        private static string GetAbsolutePathFromRelativeUri(Uri relativeUri)
-        {
-            // Verificar se esse código está executando no Visual Studio ou em um executável
-            if (System.Diagnostics.Debugger.IsAttached)
-            {
-                // Se estiver executando no Visual Studio, retorna o caminho absoluto com duas pastas acima
-                return Path.GetFullPath("../../" + relativeUri.ToString());
-            }
-            else
-            {
-                // Se estiver não estiver executando no Visual Studio, retorna o caminho absoluto
-                return Path.GetFullPath(relativeUri.ToString());
-            }
-        }
-
-        public void PlayRandomSound(Uri folderPath)
-        {
-            // Obtém a lista de arquivos de áudio na pasta
-            string[] audioFiles = Directory.GetFiles(GetAbsolutePathFromRelativeUri(folderPath), "*.wav");
-
-            if (audioFiles.Length > 0)
-            {
-                // Escolhe aleatoriamente um arquivo de áudio
-                int randomIndex = random.Next(audioFiles.Length);
-                string randomAudioFile = audioFiles[randomIndex];
-
-                // Define o caminho do arquivo de áudio no MediaPlayer
-                mediaPlayer.Open(new Uri(randomAudioFile, UriKind.RelativeOrAbsolute));
-
-                // Reproduz o áudio
-                mediaPlayer.Play();
-            }
-            // Se não houver arquivos de áudio na pasta, não faz nada
-        }
+        public string WalkingAudioFolder { get; set; }
+        public MediaPlayer MediaPlayer { get; set; }
     }
 
     // Entidade
@@ -104,9 +67,10 @@ namespace Csharpagotchi
         {
             Entity slime = new Entity();
 
-            slime.Components.Add(new PositionComponent { X = x, Y = y });
-            slime.Components.Add(new VelocityComponent { SpeedX = 0, SpeedY = 0 });
-            slime.Components.Add(new SpriteComponent { Sprite = new Uri(GetAbsolutePathFromRelativeUri("./assets/slime/sprites/walk150.gif")) });
+            Console.WriteLine(GetAbsolutePathFromRelativeUri("./assets/slime/sounds/walking"));
+            slime.Components.Add(new MovementComponent { Position = new Vector(x, y) });
+            slime.Components.Add(new SpriteComponent { IdleSprite = new Uri(GetAbsolutePathFromRelativeUri("./assets/slime/sprites/walk150.gif")), WalkSprite = new Uri(GetAbsolutePathFromRelativeUri("./assets/slime/sprites/walk150.gif")) });
+            slime.Components.Add(new AudioComponent { WalkingAudioFolder = GetAbsolutePathFromRelativeUri("./assets/slime/sounds/walking") });
 
             return slime;
         }
@@ -117,11 +81,69 @@ namespace Csharpagotchi
     {
         void Start(List<Entity> entities, Canvas canvas);
         void Update(List<Entity> entities);
+        void UpdatePerSecond(List<Entity> entities);
+    }
+
+    public class AudioSystem : ISystem
+    {
+        private readonly Random random = new Random();
+
+        private void PlayRandomSound(string folderPath, MediaPlayer mediaPlayer)
+        {
+            // Obtém a lista de arquivos de áudio na pasta
+            string[] audioFiles = Directory.GetFiles(folderPath, "*.wav");
+
+            if (audioFiles.Length > 0)
+            {
+                // Escolhe aleatoriamente um arquivo de áudio
+                int randomIndex = random.Next(audioFiles.Length);
+                string randomAudioFile = audioFiles[randomIndex];
+
+                // Define o caminho do arquivo de áudio no MediaPlayer
+                mediaPlayer.Open(new Uri(randomAudioFile, UriKind.RelativeOrAbsolute));
+
+                // Reproduz o áudio
+                mediaPlayer.Play();
+            }
+            // Se não houver arquivos de áudio na pasta, não faz nada
+        }
+
+        public void Start(List<Entity> entities, Canvas canvas)
+        {
+            // Criar um MediaPlayer para cada entidade que possuir um AudioComponent
+            foreach (var entity in entities)
+            {
+                if (entity.Components.FirstOrDefault(c => c is AudioComponent) is AudioComponent audioComponent)
+                {
+                    audioComponent.MediaPlayer = new MediaPlayer();
+                }
+            }
+        }
+
+        public void Update(List<Entity> entities)
+        {
+            // Lógica de atualização, se necessário
+        }
+
+        public void UpdatePerSecond(List<Entity> entities)
+        {
+            // Tocar um som de movimento aleatório para cada entidade que possuir um AudioComponent e estiver se movendo
+            foreach (var entity in entities)
+            {
+                if (entity.Components.FirstOrDefault(c => c is AudioComponent) is AudioComponent audioComponent && entity.Components.FirstOrDefault(c => c is MovementComponent) is MovementComponent movementComponent && movementComponent.IsMoving)
+                {
+                    if (audioComponent.MediaPlayer != null && movementComponent.IsMoving)
+                    {
+                        PlayRandomSound(audioComponent.WalkingAudioFolder, audioComponent.MediaPlayer);
+                    }
+                }
+            }
+
+        }
     }
 
     public class MovementSystem : ISystem
     {
-        private readonly AudioManager audioManager = new AudioManager();
         private readonly Random random = new Random();
         private Canvas canvas;
 
@@ -130,14 +152,12 @@ namespace Csharpagotchi
             canvas = _canvas;
             foreach (var entity in entities)
             {
-                if (entity.Components.FirstOrDefault(c => c is PositionComponent) is PositionComponent positionComponent)
+                if (entity.Components.FirstOrDefault(c => c is MovementComponent) is MovementComponent movementComponent)
                 {
-                    if (entity.Components.FirstOrDefault(c => c is VelocityComponent) is VelocityComponent velocityComponent)
-                    {
-                        // Define a velocidade inicial ao iniciar o jogo
-                        velocityComponent.DistanceToChangeDirection = 0;
-                        SetRandomVelocity(velocityComponent);
-                    }
+                    // Define a velocidade inicial ao iniciar o jogo
+                    movementComponent.DistanceToChangeDirection = 0;
+                    movementComponent.SecondsToChangeDirection = 0;
+                    SetRandomMovement(movementComponent);
                 }
             }
         }
@@ -146,39 +166,35 @@ namespace Csharpagotchi
         {
             foreach (var entity in entities)
             {
-                if (entity.Components.FirstOrDefault(c => c is PositionComponent) is PositionComponent positionComponent && entity.Components.FirstOrDefault(c => c is VelocityComponent) is VelocityComponent velocityComponent)
+                if (entity.Components.FirstOrDefault(c => c is MovementComponent) is MovementComponent movementComponent)
                 {
                     // Atualiza a posição com base na velocidade
-                    positionComponent.X += velocityComponent.SpeedX;
-                    positionComponent.Y += velocityComponent.SpeedY;
-
-                    // Toca áudio aleatório de movimento
-                    bool isPlaying = audioManager.mediaPlayer.Position < audioManager.mediaPlayer.NaturalDuration;
-                    if (!isPlaying)
-                    {
-                        audioManager.PlayRandomSound(new Uri("./assets/slime/sounds/", UriKind.Relative));
+                    if (movementComponent.IsMoving) {
+                        movementComponent.Position += movementComponent.Speed;
                     }
 
                     // Verifica se o slime está prestes a sair da tela
-                    CheckScreenBounds(positionComponent, velocityComponent, canvas);
+                    CheckScreenBounds(movementComponent, canvas);
 
                     // Atualiza a velocidade aleatoriamente
-                    SetRandomVelocity(velocityComponent);
-
-                    // Verificar se o slime está parado ou andando
-                    if (velocityComponent.SpeedX == 0 && velocityComponent.SpeedY == 0)
-                    {
-                        ((SpriteComponent)entity.Components.FirstOrDefault(c => c is SpriteComponent)).IsMoving = false;
-                    }
-                    else
-                    {
-                        ((SpriteComponent)entity.Components.FirstOrDefault(c => c is SpriteComponent)).IsMoving = true;
-                    }
+                    SetRandomMovement(movementComponent);
                 }
             }
         }
 
-        private void CheckScreenBounds(PositionComponent positionComponent, VelocityComponent velocityComponent, Canvas canvas)
+        public void UpdatePerSecond(List<Entity> entities)
+        {
+            foreach (var entity in entities)
+            {
+                if (entity.Components.FirstOrDefault(c => c is MovementComponent) is MovementComponent movementComponent && movementComponent.DistanceToChangeDirection <= 0 && movementComponent.SecondsToChangeDirection > 0)
+                {
+                    // Diminui o tempo para mudar a direção
+                    movementComponent.SecondsToChangeDirection--;
+                }
+            }
+        }
+
+        private void CheckScreenBounds(MovementComponent movementComponent, Canvas canvas)
         {
             // Obtém as dimensões da tela
             double screenWidth = canvas.ActualWidth;
@@ -189,78 +205,82 @@ namespace Csharpagotchi
             double spriteHeight = 98;
 
             // Verifica se o slime está fora dos limites da tela e ajusta a posição
-            if (positionComponent.X < 0)
+            if (movementComponent.Position.X < 0)
             {
-                positionComponent.X = 0;
-                velocityComponent.SpeedX = Math.Abs(velocityComponent.SpeedX); // Inverte a direção
+                movementComponent.Position = new Vector(0, movementComponent.Position.Y);
+                movementComponent.Speed = new Vector(Math.Abs(movementComponent.Speed.X), movementComponent.Speed.Y); // Inverte a direção
             }
-            else if (positionComponent.X + spriteWidth > screenWidth)
+            else if (movementComponent.Position.X + spriteWidth > screenWidth)
             {
-                positionComponent.X = screenWidth - spriteWidth;
-                velocityComponent.SpeedX = -Math.Abs(velocityComponent.SpeedX); // Inverte a direção
+                movementComponent.Position = new Vector(screenWidth - spriteWidth, movementComponent.Position.Y);
+                movementComponent.Speed = new Vector(-Math.Abs(movementComponent.Speed.X), movementComponent.Speed.Y); // Inverte a direção
             }
 
-            if (positionComponent.Y < 0)
+            if (movementComponent.Position.Y < 0)
             {
-                positionComponent.Y = 0;
-                velocityComponent.SpeedY = Math.Abs(velocityComponent.SpeedY); // Inverte a direção
+                movementComponent.Position = new Vector(movementComponent.Position.X, 0);
+                movementComponent.Speed = new Vector(movementComponent.Speed.X, Math.Abs(movementComponent.Speed.Y)); // Inverte a direção
             }
-            else if (positionComponent.Y + spriteHeight > screenHeight)
+            else if (movementComponent.Position.Y + spriteHeight > screenHeight)
             {
-                positionComponent.Y = screenHeight - spriteHeight;
-                velocityComponent.SpeedY = -Math.Abs(velocityComponent.SpeedY); // Inverte a direção
+                movementComponent.Position = new Vector(movementComponent.Position.X, screenHeight - spriteHeight);
+                movementComponent.Speed = new Vector(movementComponent.Speed.X, -Math.Abs(movementComponent.Speed.Y)); // Inverte a direção
             }
         }
 
-        private void SetRandomVelocity(VelocityComponent velocityComponent)
-        {
-            if (velocityComponent.DistanceToChangeDirection <= 0)
+        private void SetRandomMovement(MovementComponent movementComponent)
+    {
+            if (movementComponent.DistanceToChangeDirection <= 0 && movementComponent.SecondsToChangeDirection <= 0)
             {
                 // Gera velocidades aleatórias
-                velocityComponent.SpeedX = random.NextDouble() * 4 - 1; // Valor entre -1 e 1
-                velocityComponent.SpeedY = random.NextDouble() * 4 - 1; // Valor entre -1 e 1
+                movementComponent.Speed = new Vector(RandomizeSign(random.Next(1, 3)), RandomizeSign(random.Next(1, 3)));
 
                 // Gera distância aleatória para mudar a direção
-                velocityComponent.DistanceToChangeDirection = random.NextDouble() * 1000;
+                movementComponent.DistanceToChangeDirection = random.Next(100, 600);
+                movementComponent.SecondsToChangeDirection = random.Next(10, 15);
+            }
+            else if (movementComponent.SecondsToChangeDirection > 0 && movementComponent.DistanceToChangeDirection > 0)
+            {
+                movementComponent.IsMoving = true;
+                movementComponent.DistanceToChangeDirection -= Math.Abs(movementComponent.Speed.X) < Math.Abs(movementComponent.Speed.Y) ? Math.Abs(movementComponent.Speed.Y) : Math.Abs(movementComponent.Speed.X);
             }
             else
             {
-                velocityComponent.DistanceToChangeDirection -= Math.Abs(velocityComponent.SpeedX) < Math.Abs(velocityComponent.SpeedY) ? Math.Abs(velocityComponent.SpeedY) : Math.Abs(velocityComponent.SpeedX);
+                movementComponent.IsMoving = false;
             }
         }
 
+        // Receber número e aleatorizar se é negativo ou positivo
+        private int RandomizeSign(int number)
+        {
+            return random.Next(2) == 0 ? Math.Abs(number) : -Math.Abs(number);
+        }
     }
 
     public class RenderingSystem : ISystem
     {
-        private static string GetAbsolutePathFromRelativeUri(string relativeUri)
-        {
-            // Verificar se esse código está executando no Visual Studio ou em um executável
-            if (System.Diagnostics.Debugger.IsAttached)
-            {
-                // Se estiver executando no Visual Studio, retorna o caminho absoluto com duas pastas acima
-                return Path.GetFullPath("../../" + relativeUri);
-            }
-            else
-            {
-                // Se estiver não estiver executando no Visual Studio, retorna o caminho absoluto
-                return Path.GetFullPath(relativeUri);
-            }
-        }
-
         public void Start(List<Entity> entities, Canvas canvas)
         {
             foreach (var entity in entities)
             {
                 if (entity.Components.FirstOrDefault(c => c is SpriteComponent) is SpriteComponent spriteComponent)
                 {
+                    // Define os BitmapImage dos sprites
+                    spriteComponent.IdleSpriteBitmap = new BitmapImage(spriteComponent.IdleSprite);
+                    BitmapImage walkingBitmap = new BitmapImage();
+                    walkingBitmap.BeginInit();
+                    walkingBitmap.UriSource = spriteComponent.WalkSprite;
+                    walkingBitmap.EndInit();
+                    spriteComponent.WalkSpriteBitmap = walkingBitmap;
+
                     // Adiciona o sprite ao canvas
                     spriteComponent.Image = new Image
                     {
-                        Source = new BitmapImage(spriteComponent.Sprite),
+                        Source = spriteComponent.IdleSpriteBitmap,
                         Height = 98,
                         Width = 98
                     };
+
                     canvas.Children.Add(spriteComponent.Image);
                 }
             }
@@ -270,40 +290,40 @@ namespace Csharpagotchi
         {
             foreach (var entity in entities)
             {
-                if (entity.Components.FirstOrDefault(c => c is PositionComponent) is PositionComponent positionComponent && entity.Components.FirstOrDefault(c => c is SpriteComponent) is SpriteComponent spriteComponent)
+                if (entity.Components.FirstOrDefault(c => c is MovementComponent) is MovementComponent movementComponent && entity.Components.FirstOrDefault(c => c is SpriteComponent) is SpriteComponent spriteComponent)
                 {
                     // Pega a posição do componente e atualiza a posição do sprite
-                    Canvas.SetLeft(spriteComponent.Image, positionComponent.X);
-                    Canvas.SetTop(spriteComponent.Image, positionComponent.Y);
+                    Canvas.SetLeft(spriteComponent.Image, movementComponent.Position.X);
+                    Canvas.SetTop(spriteComponent.Image, movementComponent.Position.Y);
 
                     // Verifica se o estado de movimento mudou
-                    if (spriteComponent.IsMoving != spriteComponent.PreviousIsMoving)
+                    if (movementComponent.IsMoving != spriteComponent.PreviousIsMoving)
                     {
                         // Se mudou, atualiza o estado anterior
-                        spriteComponent.PreviousIsMoving = spriteComponent.IsMoving;
+                        spriteComponent.PreviousIsMoving = movementComponent.IsMoving;
 
                         // Verifica se o slime está parado ou andando
-                        if (spriteComponent.IsMoving)
+                        if (movementComponent.IsMoving)
                         {
-                            Console.WriteLine("Andando");
-                            BitmapImage image = new BitmapImage(); // Cria um objeto BitmapImage
-                            image.BeginInit();
-                            image.UriSource = new Uri(GetAbsolutePathFromRelativeUri("./assets/slime/sprites/walk150.gif"), UriKind.Absolute);
-                            image.EndInit();
-                            ImageBehavior.SetAnimatedSource(spriteComponent.Image, image);
-                            ImageBehavior.SetRepeatBehavior(spriteComponent.Image, RepeatBehavior.Forever);
+                            ImageBehavior.SetAutoStart(spriteComponent.Image, true);
+                            ImageBehavior.SetAnimatedSource(spriteComponent.Image, spriteComponent.WalkSpriteBitmap);
                         }
                         else
                         {
-                            Console.WriteLine("Parado");
-                            // Se o slime estiver andando, define o sprite andando
-                            spriteComponent.Sprite = new Uri("./assets/slime/sprites/walk150.gif", UriKind.Relative);
+                            ImageBehavior.SetAutoStart(spriteComponent.Image, false);
+                            ImageBehavior.SetAnimatedSource(spriteComponent.Image, spriteComponent.IdleSpriteBitmap);
                         }
+                        ImageBehavior.SetRepeatBehavior(spriteComponent.Image, RepeatBehavior.Forever);
                     }
 
                     // Aqui você poderia adicionar lógica de animação, etc.
                 }
             }
+        }
+
+        public void UpdatePerSecond(List<Entity> entities)
+        {
+            // Lógica para atualizar a lógica do jogo por segundo
         }
     }
 
@@ -313,6 +333,7 @@ namespace Csharpagotchi
     public partial class MainWindow : Window
     {
         private readonly DispatcherTimer gameTimer;
+        private readonly DispatcherTimer gameTimerSeconds;
 
         public MainWindow()
         {
@@ -340,6 +361,15 @@ namespace Csharpagotchi
             gameTimer.Tick += GameLoop; // Define o método a ser chamado a cada tick
             gameTimer.Start(); // Inicia o temporizador
 
+            // Inicializa o DispatcherTimer de segundos
+            gameTimerSeconds = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(1000) // Define o intervalo para 1 segundo
+            };
+
+            gameTimerSeconds.Tick += GameLoopPerSecond; // Define o método a ser chamado a cada tick
+            gameTimerSeconds.Start(); // Inicia o temporizador
+
             // Inicializa o jogo
             StartGame();
         }
@@ -360,40 +390,31 @@ namespace Csharpagotchi
             // Inicializa os sistemas
             MovementSystem movementSystem = new MovementSystem();
             RenderingSystem renderingSystem = new RenderingSystem();
+            AudioSystem audioSystem = new AudioSystem();
 
             // Adiciona os sistemas à lista de sistemas
             systems.Add(movementSystem);
             systems.Add(renderingSystem);
+            systems.Add(audioSystem);
 
             // Inicializa os sistemas
             systems.ForEach(system => system.GetType().GetMethod("Start").Invoke(system, new object[] { entities, (Canvas)FindName("Game") }));
         }
 
+        // Método chamado a cada tick do DispatcherTimer de segundos
+        private void GameLoopPerSecond(object sender, EventArgs e)
+        {
+            // Lógica do jogo - atualizações, movimentos, cálculos, etc.
+            // Chamadas de métodos para atualizar a lógica do jogo
+            systems.ForEach(system => system.GetType().GetMethod("UpdatePerSecond").Invoke(system, new object[] { entities }));
+        }
+
         // Método chamado a cada tick do DispatcherTimer
         private void GameLoop(object sender, EventArgs e)
         {
-            // Printar FPS no terminal
-            //Console.WriteLine("FPS: " + 1000 / gameTimer.Interval.TotalMilliseconds);
-
             // Lógica do jogo - atualizações, movimentos, cálculos, etc.
             // Chamadas de métodos para atualizar a lógica do jogo
             systems.ForEach(system => system.GetType().GetMethod("Update").Invoke(system, new object[] { entities }));
-        }
-
-        // Métodos de exemplo para atualizar a lógica do jogo e a interface gráfica
-        private void AtualizarPosicoes()
-        {
-            // Lógica para atualizar as posições dos elementos do jogo
-        }
-
-        private void VerificarColisoes()
-        {
-            // Lógica para verificar colisões entre objetos do jogo
-        }
-
-        private void AtualizarInterface()
-        {
-            // Lógica para atualizar a interface gráfica com base no estado do jogo
         }
     }
 }

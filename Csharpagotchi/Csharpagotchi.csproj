@@ -51,7 +51,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>0EC48F1673D99A6699F7E5F8DF3E3D90E1BD63F2</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>9BAEC6E4B6ED194D0874498B8B68C8D9B9D267DC</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
     <ManifestKeyFile>Csharpagotchi_TemporaryKey.pfx</ManifestKeyFile>
@@ -94,6 +94,7 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="GlobalSuppressions.cs" />
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>

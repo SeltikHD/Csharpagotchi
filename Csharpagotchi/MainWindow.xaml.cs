@@ -22,16 +22,21 @@ namespace Csharpagotchi
         public double DistanceToChangeDirection { get; set; }
         public int SecondsToChangeDirection { get; set; }
         public bool IsMoving { get; set; } = false;
-        public bool IsGrabbing { get; set; } = false;
     }
 
     public class PhysicsComponent
     {
         // Objeto contendo as propriedades físicas do personagem
         public bool Enabled { get; set; } = false;
-        public Vector Acceleration { get; set; } = new Vector(0, 0);
-        public double TimeInAcceleration { get; set; } = 0; // Tempo em ticks (60 ticks = 1 segundo)
-        public Vector LastPosition { get; set; } = new Vector(0, 0);
+        public double Direction { get; set; } // Ângulo em graus
+    }
+
+    public class InputComponent
+    {
+        // Objeto contendo as propriedades de input do personagem
+        public bool IsGrabbing { get; set; } = false;
+        public bool IsDraggable { get; set; } = false;
+        public Vector LastMousePosition { get; set; }
     }
 
     public class SpriteComponent
@@ -45,8 +50,6 @@ namespace Csharpagotchi
         public BitmapImage WalkSpriteBitmap { get; set; }
         public Image Image { get; set; }
         public bool PreviousIsMoving { get; set; } = false;
-        public Point MousePosition { get; set; }
-        public double Angle { get; set; }
     }
 
     public class AudioComponent
@@ -86,6 +89,7 @@ namespace Csharpagotchi
             slime.Components.Add(new SpriteComponent { Width = 98, Height = 98, IdleSprite = new Uri(GetAbsolutePathFromRelativeUri("./assets/slime/sprites/walk150.gif")), WalkSprite = new Uri(GetAbsolutePathFromRelativeUri("./assets/slime/sprites/walk150.gif")) });
             slime.Components.Add(new AudioComponent { WalkingAudioFolder = GetAbsolutePathFromRelativeUri("./assets/slime/sounds/walking") });
             slime.Components.Add(new PhysicsComponent());
+            slime.Components.Add(new InputComponent{ IsDraggable = true});
 
             return slime;
         }
@@ -103,7 +107,7 @@ namespace Csharpagotchi
     // Sistema de física
     public class PhysicsSystem : ISystem
     {
-        public void Start(List<Entity> entities, Canvas _canvas)
+        public void Start(List<Entity> entities, Canvas canvas)
         {
             // Lógica de inicialização, se necessário
         }
@@ -112,34 +116,16 @@ namespace Csharpagotchi
         {
             foreach (var entity in entities)
             {
-                if (entity.Components.FirstOrDefault(c => c is PhysicsComponent) is PhysicsComponent physicsComponent && entity.Components.FirstOrDefault(c => c is SpriteComponent) is SpriteComponent spriteComponent)
+                if (entity.Components.Find(c => c is PhysicsComponent) is PhysicsComponent physicsComponent)
                 {
                     // Verifica se o componente está habilitado
                     if (physicsComponent.Enabled)
                     {
-                        if(physicsComponent.TimeInAcceleration <= 0)
-                        {
-                            // Atualiza a última posição
-                            physicsComponent.LastPosition = (Vector)spriteComponent.MousePosition;
-                            physicsComponent.TimeInAcceleration = 0;
-                        } 
-                        else
-                        {
-                            // Atualiza o deslocamento e salvando a última posição
-                            //physicsComponent.LastPosition += (Vector)spriteComponent.MousePosition;
-                        }
-
-                        // Atualiza o tempo de aceleração
-                        physicsComponent.TimeInAcceleration += 1;
+                        // Obtém a posição do mouse
                     }
-                    else if (physicsComponent.TimeInAcceleration > 0)
+                    else
                     {
-                        // Calcula a aceleração
-                        physicsComponent.Acceleration = (physicsComponent.LastPosition - (Vector)spriteComponent.MousePosition) / (physicsComponent.TimeInAcceleration / 60);
-                        Console.WriteLine(physicsComponent.Acceleration);
-
-                        // Atualiza o tempo de aceleração
-                        physicsComponent.TimeInAcceleration = 0;
+                        // Se não estiver habilitado, não faz nada
                     }
                 }
             }
@@ -176,12 +162,12 @@ namespace Csharpagotchi
             // Se não houver arquivos de áudio na pasta, não faz nada
         }
 
-        public void Start(List<Entity> entities, Canvas _canvas)
+        public void Start(List<Entity> entities, Canvas canvas)
         {
             // Criar um MediaPlayer para cada entidade que possuir um AudioComponent
             foreach (var entity in entities)
             {
-                if (entity.Components.FirstOrDefault(c => c is AudioComponent) is AudioComponent audioComponent)
+                if (entity.Components.Find(c => c is AudioComponent) is AudioComponent audioComponent)
                 {
                     audioComponent.MediaPlayer = new MediaPlayer();
                 }
@@ -198,28 +184,26 @@ namespace Csharpagotchi
             // Tocar um som de movimento aleatório para cada entidade que possuir um AudioComponent e estiver se movendo
             foreach (var entity in entities)
             {
-                if (entity.Components.FirstOrDefault(c => c is AudioComponent) is AudioComponent audioComponent && entity.Components.FirstOrDefault(c => c is MovementComponent) is MovementComponent movementComponent && movementComponent.IsMoving)
+                if (entity.Components.Find(c => c is AudioComponent) is AudioComponent audioComponent && entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent && movementComponent.IsMoving && audioComponent.MediaPlayer != null && movementComponent.IsMoving)
                 {
-                    if (audioComponent.MediaPlayer != null && movementComponent.IsMoving)
-                    {
-                        PlayRandomSound(audioComponent.WalkingAudioFolder, audioComponent.MediaPlayer);
-                    }
+                    PlayRandomSound(audioComponent.WalkingAudioFolder, audioComponent.MediaPlayer);
                 }
             }
         }
     }
 
+    // Sistema de movimento
     public class MovementSystem : ISystem
     {
         private readonly Random random = new Random();
-        private Canvas canvas;
+        private Canvas mainCanvas;
 
-        public void Start(List<Entity> entities, Canvas _canvas)
+        public void Start(List<Entity> entities, Canvas canvas)
         {
-            canvas = _canvas;
+            mainCanvas = canvas;
             foreach (var entity in entities)
             {
-                if (entity.Components.FirstOrDefault(c => c is MovementComponent) is MovementComponent movementComponent)
+                if (entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent)
                 {
                     // Define a velocidade inicial ao iniciar o jogo
                     movementComponent.DistanceToChangeDirection = 0;
@@ -233,31 +217,16 @@ namespace Csharpagotchi
         {
             foreach (var entity in entities)
             {
-                if (entity.Components.FirstOrDefault(c => c is MovementComponent) is MovementComponent movementComponent)
+                if (entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent)
                 {
-                    SpriteComponent spriteComponent = (SpriteComponent)entity.Components.FirstOrDefault(c => c is SpriteComponent);
+                    SpriteComponent spriteComponent = (SpriteComponent)entity.Components.Find(c => c is SpriteComponent);
+                    InputComponent inputComponent = (InputComponent)entity.Components.Find(c => c is InputComponent);
 
-                    if (movementComponent.IsGrabbing)
+                    if (inputComponent.IsGrabbing)
                     {
                         if (spriteComponent != null)
                         {
-                            double radians = spriteComponent.Angle * (Math.PI / 180); // Converte o ângulo de graus para radianos
-                            double sin = Math.Sin(radians);
-                            double cos = Math.Cos(radians);
-
-                            double offsetX = spriteComponent.Width / 2; // Deslocamento horizontal do centro da imagem
-                            double offsetY = spriteComponent.Height / 2; // Deslocamento vertical do centro da imagem
-
-                            // Calcula a posição da imagem ajustando com base no ângulo de rotação
-                            double rotatedX = cos * offsetX - sin * offsetY;
-                            double rotatedY = sin * offsetX + cos * offsetY;
-
-                            double imageX = spriteComponent.MousePosition.X - rotatedX; // Calcula a nova posição X da imagem
-                            double imageY = spriteComponent.MousePosition.Y - rotatedY; // Calcula a nova posição Y da imagem
-
-                            movementComponent.Position = new Vector(imageX, imageY);
-
-                            //movementComponent.Position = new Vector(spriteComponent.MousePosition.X - spriteComponent.Width / 2, spriteComponent.MousePosition.Y - spriteComponent.Height / 2);
+                            movementComponent.Position = new Vector(inputComponent.LastMousePosition.X - spriteComponent.Width / 2, inputComponent.LastMousePosition.Y);
                         }
 
                         movementComponent.IsMoving = false;
@@ -277,7 +246,7 @@ namespace Csharpagotchi
                     if (spriteComponent != null)
                     {
                         // Verifica se o slime está prestes a sair da tela
-                        CheckScreenBounds(movementComponent, spriteComponent, canvas);
+                        CheckScreenBounds(movementComponent, spriteComponent);
                     }
                 }
             }
@@ -287,7 +256,7 @@ namespace Csharpagotchi
         {
             foreach (var entity in entities)
             {
-                if (entity.Components.FirstOrDefault(c => c is MovementComponent) is MovementComponent movementComponent && movementComponent.DistanceToChangeDirection <= 0 && movementComponent.SecondsToChangeDirection > 0)
+                if (entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent && movementComponent.DistanceToChangeDirection <= 0 && movementComponent.SecondsToChangeDirection > 0)
                 {
                     // Diminui o tempo para mudar a direção
                     movementComponent.SecondsToChangeDirection--;
@@ -295,11 +264,11 @@ namespace Csharpagotchi
             }
         }
 
-        private void CheckScreenBounds(MovementComponent movementComponent, SpriteComponent spriteComponent, Canvas canvas)
+        private void CheckScreenBounds(MovementComponent movementComponent, SpriteComponent spriteComponent)
         {
             // Obtém as dimensões da tela
-            double screenWidth = canvas.ActualWidth;
-            double screenHeight = canvas.ActualHeight;
+            double screenWidth = mainCanvas.ActualWidth;
+            double screenHeight = mainCanvas.ActualHeight;
 
             // Verifica se o slime está fora dos limites da tela e ajusta a posição
             if (movementComponent.Position.X < 0)
@@ -354,13 +323,119 @@ namespace Csharpagotchi
         }
     }
 
+    // Sistema de input
+    public class InputSystem : ISystem
+    {
+        private Vector lastMousePosition;
+        public void Start(List<Entity> entities, Canvas canvas)
+        {
+            foreach (var entity in entities)
+            {
+                if (entity.Components.Find(c => c is InputComponent) is InputComponent inputComponent)
+                {
+                    // Define o evento de movimento do mouse no canvas
+                    canvas.MouseMove += (sender, e) =>
+                    {
+                        Vector actualPosition = (Vector)e.GetPosition(canvas);
+                        lastMousePosition = actualPosition;
+
+                        // Verifica se a entidade está sendo arrastada
+                        if (e.LeftButton == MouseButtonState.Pressed && inputComponent.IsGrabbing && entity.Components.Find(c => c is PhysicsComponent) is PhysicsComponent physicsComponent && entity.Components.Find(c => c is SpriteComponent) is SpriteComponent spriteComponent2)
+                        {
+                            double scale = 100;
+                            Vector direction = actualPosition - inputComponent.LastMousePosition;
+                            physicsComponent.Direction = Math.Atan2(direction.X * scale *- 1, direction.Y * scale * - 1) * (180.0 / Math.PI);
+                            //physicsComponent.Direction += 1;
+
+                            Console.WriteLine(physicsComponent.Direction);
+                            Console.WriteLine(direction.X * scale * -1 + " | " + direction.Y * scale * -1);
+                            RotateTransform rotateTransform = new RotateTransform(physicsComponent.Direction);
+                            spriteComponent2.Image.RenderTransform = rotateTransform;
+                        }
+
+                        // Obtém a posição do mouse
+                        inputComponent.LastMousePosition = actualPosition;
+                    };
+
+
+                    if (entity.Components.Find(c => c is SpriteComponent) is SpriteComponent spriteComponent)
+                    {
+                        spriteComponent.Image.MouseMove += (sender, e) =>
+                        {
+                            if (e.LeftButton == MouseButtonState.Pressed && inputComponent.IsDraggable)
+                            {
+                                if (entity.Components.Find(c => c is PhysicsComponent) is PhysicsComponent physicsComponent)
+                                {
+                                    physicsComponent.Enabled = true;
+                                }
+
+                                canvas.CaptureMouse();
+
+                                Mouse.OverrideCursor = Cursors.SizeAll;
+                                canvas.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
+
+                                inputComponent.IsGrabbing = true;
+                            }
+                            else
+                            {
+                                Mouse.OverrideCursor = Cursors.Hand;
+                            }
+                        };
+                    }
+
+                    canvas.MouseUp += (sender, e) =>
+                    {
+                        if (inputComponent.IsGrabbing)
+                        {
+                            inputComponent.LastMousePosition = new Vector();
+
+                            if (entity.Components.Find(c => c is PhysicsComponent) is PhysicsComponent physicsComponent)
+                            {
+                                physicsComponent.Enabled = false;
+                            }
+
+                            inputComponent.IsGrabbing = false;
+
+                            if (entity.Components.Find(c => c is SpriteComponent) is SpriteComponent spriteComponent2)
+                            {
+                                RotateTransform rotateTransform = new RotateTransform(0);
+                                spriteComponent2.Image.RenderTransform = rotateTransform;
+                            }
+                   
+                            canvas.ReleaseMouseCapture();
+                            canvas.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
+                        }
+                    };
+                }
+            }
+        }
+
+        public void Update(List<Entity> entities)
+        {
+            foreach (var entity in entities)
+            {
+                if (false && entity.Components.Find(c => c is InputComponent) is InputComponent inputComponent && inputComponent.LastMousePosition == lastMousePosition && inputComponent.IsGrabbing && entity.Components.Find(c => c is SpriteComponent) is SpriteComponent spriteComponent)
+                {
+                    RotateTransform rotateTransform = new RotateTransform(0);
+                    spriteComponent.Image.RenderTransform = rotateTransform;
+                }
+            }
+        }
+
+        public void UpdatePerSecond(List<Entity> entities)
+        {
+            // Lógica de atualização por segundo, se necessário
+        }
+    }
+
+    // Sistema de renderização
     public class RenderingSystem : ISystem
     {
         public void Start(List<Entity> entities, Canvas canvas)
         {
             foreach (var entity in entities)
             {
-                if (entity.Components.FirstOrDefault(c => c is SpriteComponent) is SpriteComponent spriteComponent)
+                if (entity.Components.Find(c => c is SpriteComponent) is SpriteComponent spriteComponent)
                 {
                     // Define os BitmapImage dos sprites
                     spriteComponent.IdleSpriteBitmap = new BitmapImage(spriteComponent.IdleSprite);
@@ -379,63 +454,6 @@ namespace Csharpagotchi
                     };
 
                     canvas.Children.Add(spriteComponent.Image);
-                    canvas.MouseMove += (sender, e) =>
-                    {
-                        spriteComponent.MousePosition = e.GetPosition(canvas);
-
-                        if (e.LeftButton == MouseButtonState.Pressed)
-                        {
-                            spriteComponent.Angle = Math.Atan2(spriteComponent.MousePosition.Y, spriteComponent.MousePosition.X) * (180 / Math.PI);
-
-                            RotateTransform rotateTransform = new RotateTransform(spriteComponent.Angle);
-                            spriteComponent.Image.RenderTransform = rotateTransform;
-                        }
-                    };
-
-                    spriteComponent.Image.MouseMove += (sender, e) =>
-                    {
-                        if (entity.Components.FirstOrDefault(c => c is MovementComponent) is MovementComponent movementComponent)
-                        {
-                            if (e.LeftButton == MouseButtonState.Pressed)
-                            {
-                                if (entity.Components.FirstOrDefault(c => c is PhysicsComponent) is PhysicsComponent physicsComponent)
-                                {
-                                    physicsComponent.Enabled = true;
-                                }
-
-                                canvas.CaptureMouse();
-
-                                Mouse.OverrideCursor = Cursors.SizeAll;
-                                canvas.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
-
-                                movementComponent.IsGrabbing = true;
-                            } else
-                            {
-                                Mouse.OverrideCursor = Cursors.Hand;
-                            }
-                        }
-                    };
-
-                    canvas.MouseUp += (sender, e) =>
-                    {
-                        if (entity.Components.FirstOrDefault(c => c is MovementComponent) is MovementComponent movementComponent && movementComponent.IsGrabbing)
-                        {
-                            spriteComponent.MousePosition = new Point();
-
-                            if (entity.Components.FirstOrDefault(c => c is PhysicsComponent) is PhysicsComponent physicsComponent)
-                            {
-                                physicsComponent.Enabled = false;
-                            }
-
-                            movementComponent.IsGrabbing = false;
-
-                            RotateTransform rotateTransform = new RotateTransform(0);
-                            spriteComponent.Image.RenderTransform = rotateTransform;
-
-                            canvas.ReleaseMouseCapture();
-                            canvas.Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0));
-                        }
-                    };
                 }
             }
         }
@@ -444,7 +462,7 @@ namespace Csharpagotchi
         {
             foreach (var entity in entities)
             {
-                if (entity.Components.FirstOrDefault(c => c is MovementComponent) is MovementComponent movementComponent && entity.Components.FirstOrDefault(c => c is SpriteComponent) is SpriteComponent spriteComponent)
+                if (entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent && entity.Components.Find(c => c is SpriteComponent) is SpriteComponent spriteComponent)
                 {
                     // Pega a posição do componente e atualiza a posição do sprite
                     Canvas.SetLeft(spriteComponent.Image, movementComponent.Position.X);
@@ -509,7 +527,7 @@ namespace Csharpagotchi
             // Inicializa o DispatcherTimer
             gameTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(1000 / 60) // Define o intervalo para aproximadamente 60 FPS
+                Interval = TimeSpan.FromMilliseconds(1000.0 / 60) // Define o intervalo para aproximadamente 60 FPS
             };
 
             gameTimer.Tick += GameLoop; // Define o método a ser chamado a cada tick
@@ -546,12 +564,14 @@ namespace Csharpagotchi
             RenderingSystem renderingSystem = new RenderingSystem();
             AudioSystem audioSystem = new AudioSystem();
             PhysicsSystem physicsSystem = new PhysicsSystem();
+            InputSystem inputSystem = new InputSystem();
 
             // Adiciona os sistemas à lista de sistemas
             systems.Add(movementSystem);
             systems.Add(renderingSystem);
             systems.Add(audioSystem);
             systems.Add(physicsSystem);
+            systems.Add(inputSystem);
 
             // Inicializa os sistemas
             systems.ForEach(system => system.GetType().GetMethod("Start").Invoke(system, new object[] { entities, (Canvas)FindName("Game") }));

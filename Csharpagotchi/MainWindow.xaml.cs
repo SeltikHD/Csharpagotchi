@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -29,6 +28,8 @@ namespace Csharpagotchi
         // Objeto contendo as propriedades físicas do personagem
         public bool Enabled { get; set; } = false;
         public double Direction { get; set; } // Ângulo em graus
+        public double Smoothness { get; set; } = 0.3;
+        public double SmoothDirection { get; set; } = 0;
     }
 
     public class InputComponent
@@ -121,7 +122,8 @@ namespace Csharpagotchi
                     // Verifica se o componente está habilitado
                     if (physicsComponent.Enabled)
                     {
-                        // Obtém a posição do mouse
+                        // Atualiza o SmoothDirection
+                        physicsComponent.SmoothDirection += (physicsComponent.Direction - physicsComponent.SmoothDirection) * physicsComponent.Smoothness;
                     }
                     else
                     {
@@ -226,7 +228,7 @@ namespace Csharpagotchi
                     {
                         if (spriteComponent != null)
                         {
-                            movementComponent.Position = new Vector(inputComponent.LastMousePosition.X - spriteComponent.Width / 2, inputComponent.LastMousePosition.Y);
+                            movementComponent.Position = new Vector(inputComponent.LastMousePosition.X - spriteComponent.Width / 2, inputComponent.LastMousePosition.Y - spriteComponent.Height / 2);
                         }
 
                         movementComponent.IsMoving = false;
@@ -344,13 +346,7 @@ namespace Csharpagotchi
                         {
                             double scale = 100;
                             Vector direction = actualPosition - inputComponent.LastMousePosition;
-                            physicsComponent.Direction = Math.Atan2(direction.X * scale *- 1, direction.Y * scale * - 1) * (180.0 / Math.PI);
-                            //physicsComponent.Direction += 1;
-
-                            Console.WriteLine(physicsComponent.Direction);
-                            Console.WriteLine(direction.X * scale * -1 + " | " + direction.Y * scale * -1);
-                            RotateTransform rotateTransform = new RotateTransform(physicsComponent.Direction);
-                            spriteComponent2.Image.RenderTransform = rotateTransform;
+                            physicsComponent.Direction = Math.Atan2(direction.X * scale, direction.Y * scale * - 1) * (180.0 / Math.PI);
                         }
 
                         // Obtém a posição do mouse
@@ -414,10 +410,15 @@ namespace Csharpagotchi
         {
             foreach (var entity in entities)
             {
-                if (false && entity.Components.Find(c => c is InputComponent) is InputComponent inputComponent && inputComponent.LastMousePosition == lastMousePosition && inputComponent.IsGrabbing && entity.Components.Find(c => c is SpriteComponent) is SpriteComponent spriteComponent)
+                if (entity.Components.Find(c => c is InputComponent) is InputComponent inputComponent && entity.Components.Find(c => c is PhysicsComponent) is PhysicsComponent physicsComponent && inputComponent.LastMousePosition == lastMousePosition && inputComponent.IsGrabbing)
                 {
-                    RotateTransform rotateTransform = new RotateTransform(0);
-                    spriteComponent.Image.RenderTransform = rotateTransform;
+                    physicsComponent.Direction = 0;
+
+                    if (entity.Components.Find(c => c is SpriteComponent) is SpriteComponent spriteComponent)
+                    {
+                        RotateTransform rotateTransform = new RotateTransform(physicsComponent.SmoothDirection, spriteComponent.Width / 2, spriteComponent.Height / 2);
+                        spriteComponent.Image.RenderTransform = rotateTransform;
+                    }
                 }
             }
         }
@@ -462,33 +463,34 @@ namespace Csharpagotchi
         {
             foreach (var entity in entities)
             {
-                if (entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent && entity.Components.Find(c => c is SpriteComponent) is SpriteComponent spriteComponent)
+                if (entity.Components.Find(c => c is SpriteComponent) is SpriteComponent spriteComponent)
                 {
-                    // Pega a posição do componente e atualiza a posição do sprite
-                    Canvas.SetLeft(spriteComponent.Image, movementComponent.Position.X);
-                    Canvas.SetTop(spriteComponent.Image, movementComponent.Position.Y);
-
-                    // Verifica se o estado de movimento mudou
-                    if (movementComponent.IsMoving != spriteComponent.PreviousIsMoving)
+                    if (entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent)
                     {
-                        // Se mudou, atualiza o estado anterior
-                        spriteComponent.PreviousIsMoving = movementComponent.IsMoving;
+                        // Pega a posição do componente e atualiza a posição do sprite
+                        Canvas.SetLeft(spriteComponent.Image, movementComponent.Position.X);
+                        Canvas.SetTop(spriteComponent.Image, movementComponent.Position.Y);
 
-                        // Verifica se o slime está parado ou andando
-                        if (movementComponent.IsMoving)
+                        // Verifica se o estado de movimento mudou
+                        if (movementComponent.IsMoving != spriteComponent.PreviousIsMoving)
                         {
-                            ImageBehavior.SetAutoStart(spriteComponent.Image, true);
-                            ImageBehavior.SetAnimatedSource(spriteComponent.Image, spriteComponent.WalkSpriteBitmap);
+                            // Se mudou, atualiza o estado anterior
+                            spriteComponent.PreviousIsMoving = movementComponent.IsMoving;
+
+                            // Verifica se o slime está parado ou andando
+                            if (movementComponent.IsMoving)
+                            {
+                                ImageBehavior.SetAutoStart(spriteComponent.Image, true);
+                                ImageBehavior.SetAnimatedSource(spriteComponent.Image, spriteComponent.WalkSpriteBitmap);
+                            }
+                            else
+                            {
+                                ImageBehavior.SetAutoStart(spriteComponent.Image, false);
+                                ImageBehavior.SetAnimatedSource(spriteComponent.Image, spriteComponent.IdleSpriteBitmap);
+                            }
+                            ImageBehavior.SetRepeatBehavior(spriteComponent.Image, RepeatBehavior.Forever);
                         }
-                        else
-                        {
-                            ImageBehavior.SetAutoStart(spriteComponent.Image, false);
-                            ImageBehavior.SetAnimatedSource(spriteComponent.Image, spriteComponent.IdleSpriteBitmap);
-                        }
-                        ImageBehavior.SetRepeatBehavior(spriteComponent.Image, RepeatBehavior.Forever);
                     }
-
-                    // Aqui você poderia adicionar lógica de animação, etc.
                 }
             }
         }

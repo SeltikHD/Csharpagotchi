@@ -20,6 +20,8 @@ namespace Csharpagotchi
         public double DistanceToChangeDirection { get; set; }
         public int SecondsToChangeDirection { get; set; }
         public bool IsMoving { get; set; } = false;
+        public bool AutoWalk { get; set; } = false;
+        public double Desacceleration { get; set; } = 0.0;
         public bool Enabled { get; set; } = true;
     }
 
@@ -30,6 +32,8 @@ namespace Csharpagotchi
         public double Direction { get; set; } // Ângulo em graus
         public double Smoothness { get; set; } = 0.2;
         public double SmoothDirection { get; set; } = 0;
+        public Vector Deslocation { get; set; } = new Vector(0, 0);
+        public double TimeInDeslocation { get; set; } = 0;
     }
 
     public class InputComponent
@@ -37,7 +41,7 @@ namespace Csharpagotchi
         // Objeto contendo as propriedades de input do personagem
         public bool IsGrabbing { get; set; } = false;
         public bool IsDraggable { get; set; } = false;
-        public Vector LastMousePosition { get; set; }
+        public Vector LastMousePosition { get; set; } = new Vector(0, 0);
     }
 
     public class SpriteComponent
@@ -86,7 +90,7 @@ namespace Csharpagotchi
         {
             Entity slime = new Entity();
 
-            slime.Components.Add(new MovementComponent { Position = new Vector(x, y) });
+            slime.Components.Add(new MovementComponent { Position = new Vector(x, y), AutoWalk = true });
             slime.Components.Add(new SpriteComponent { Width = 98, Height = 98, IdleSprite = new Uri(GetAbsolutePathFromRelativeUri("./assets/slime/sprites/walk150.gif")), WalkSprite = new Uri(GetAbsolutePathFromRelativeUri("./assets/slime/sprites/walk150.gif")) });
             slime.Components.Add(new AudioComponent { WalkingAudioFolder = GetAbsolutePathFromRelativeUri("./assets/slime/sounds/walking") });
             slime.Components.Add(new PhysicsComponent());
@@ -108,6 +112,8 @@ namespace Csharpagotchi
     // Sistema de física
     public class PhysicsSystem : ISystem
     {
+        private Vector lastMousePosition = new Vector(0, 0);
+
         public void Start(List<Entity> entities, Canvas canvas)
         {
             // Lógica de inicialização, se necessário
@@ -123,10 +129,53 @@ namespace Csharpagotchi
                     physicsComponent.SmoothDirection += (physicsComponent.Direction - physicsComponent.SmoothDirection) * physicsComponent.Smoothness;
 
                     // Verifica se o componente está habilitado
-                    if (physicsComponent.Enabled)
+                    if (physicsComponent.Enabled && entity.Components.Find(c => c is InputComponent) is InputComponent inputComponent)
                     {
-                        // Verifica se o componente possui um componente de movimento
-                        
+                        if (inputComponent.IsGrabbing)
+                        {
+                            // Verifica se a posição do mouse é 0, 0 e se o vetor está definido
+                            if (lastMousePosition == new Vector(0, 0))
+                            {
+                                lastMousePosition = inputComponent.LastMousePosition;
+                            }
+
+                            // Verifica se a posição do mouse mudou e se os vetores estão definidos e maior que 0
+                            if (inputComponent.LastMousePosition != lastMousePosition && lastMousePosition != new Vector(0, 0) && inputComponent.LastMousePosition != new Vector(0, 0))
+                            {
+                                // Calcula o deslocamento
+                                physicsComponent.Deslocation += new Vector(inputComponent.LastMousePosition.X - lastMousePosition.X, inputComponent.LastMousePosition.Y - lastMousePosition.Y);
+                            }
+
+                            physicsComponent.TimeInDeslocation += 1 / 60.0;
+                            lastMousePosition = inputComponent.LastMousePosition;
+                        }
+                        else if (entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent)
+                        {
+                            // Verifica se o deslocamento é maior que 0
+                            if (physicsComponent.Deslocation != new Vector(0, 0) && physicsComponent.TimeInDeslocation > 0)
+                            {
+                                // Calcula a velocidade
+                                Vector speed = new Vector(physicsComponent.Deslocation.X / 2.5 / physicsComponent.TimeInDeslocation, physicsComponent.Deslocation.Y / 2.5 / physicsComponent.TimeInDeslocation);
+                                int signX = speed.X > 0 ? 1 : -1;
+                                int signY = speed.Y > 0 ? 1 : -1;
+                                movementComponent.Speed = new Vector((Math.Abs(speed.X) > 5000 ? signX * 5000 : speed.X) / 60, (Math.Abs(speed.Y) > 5000 ? signY * 5000 : speed.Y) / 60);
+
+                                Console.WriteLine("Speed: " + movementComponent.Speed);
+
+                                // Zera o deslocamento e o tempo de deslocamento
+                                physicsComponent.Deslocation = new Vector(0, 0);
+                                physicsComponent.TimeInDeslocation = 0;
+                                lastMousePosition = new Vector(0, 0);
+                                inputComponent.LastMousePosition = new Vector(0, 0);
+                            } else
+                            {
+                                // Define que o slime não está se movendo
+                                movementComponent.AutoWalk = false;
+                                movementComponent.IsMoving = true;
+                                movementComponent.Desacceleration = 0.98;
+                                physicsComponent.Enabled = false;
+                            }
+                        }
                     }
                 }
             }
@@ -185,7 +234,7 @@ namespace Csharpagotchi
             // Tocar um som de movimento aleatório para cada entidade que possuir um AudioComponent e estiver se movendo
             foreach (var entity in entities)
             {
-                if (entity.Components.Find(c => c is AudioComponent) is AudioComponent audioComponent && entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent && movementComponent.IsMoving && audioComponent.MediaPlayer != null && movementComponent.IsMoving)
+                if (entity.Components.Find(c => c is AudioComponent) is AudioComponent audioComponent && entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent && audioComponent.MediaPlayer != null && movementComponent.IsMoving)
                 {
                     PlayRandomSound(audioComponent.WalkingAudioFolder, audioComponent.MediaPlayer);
                 }
@@ -209,7 +258,11 @@ namespace Csharpagotchi
                     // Define a velocidade inicial ao iniciar o jogo
                     movementComponent.DistanceToChangeDirection = 0;
                     movementComponent.SecondsToChangeDirection = 0;
-                    SetRandomMovement(movementComponent);
+
+                    if (movementComponent.AutoWalk)
+                    {
+                        SetRandomMovement(movementComponent);
+                    }
                 }
             }
         }
@@ -218,30 +271,53 @@ namespace Csharpagotchi
         {
             foreach (var entity in entities)
             {
-                if (entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent && movementComponent.Enabled)
+                if (entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent)
                 {
-                    SpriteComponent spriteComponent = (SpriteComponent)entity.Components.Find(c => c is SpriteComponent);
-                    InputComponent inputComponent = (InputComponent)entity.Components.Find(c => c is InputComponent);
+                    SpriteComponent spriteComponent = (SpriteComponent) entity.Components.Find(c => c is SpriteComponent);
 
-                    if (inputComponent.IsGrabbing)
+                    if (movementComponent.Enabled)
                     {
-                        if (spriteComponent != null)
-                        {
-                            movementComponent.Position = new Vector(inputComponent.LastMousePosition.X - spriteComponent.Width / 2, inputComponent.LastMousePosition.Y - spriteComponent.Height / 2);
-                        }
+                        InputComponent inputComponent = (InputComponent) entity.Components.Find(c => c is InputComponent);
 
-                        movementComponent.IsMoving = false;
+                        if (inputComponent.IsGrabbing)
+                        {
+                            if (spriteComponent != null)
+                            {
+                                movementComponent.Position = new Vector(inputComponent.LastMousePosition.X - spriteComponent.Width / 2, inputComponent.LastMousePosition.Y - spriteComponent.Height / 2);
+                            }
+
+                            movementComponent.IsMoving = false;
+                        }
+                        else
+                        {
+                            // Atualiza a posição com base na velocidade
+                            if (movementComponent.IsMoving)
+                            {
+                                movementComponent.Position += movementComponent.Speed;
+                            }
+
+                            if (movementComponent.Desacceleration > 0.0)
+                            {
+                                movementComponent.Speed = new Vector(movementComponent.Speed.X * movementComponent.Desacceleration, movementComponent.Speed.Y * movementComponent.Desacceleration);
+                            }
+
+                            if (Math.Abs(movementComponent.Speed.X) < 2 && Math.Abs(movementComponent.Speed.Y) < 2 && !movementComponent.AutoWalk)
+                            {
+                                movementComponent.Desacceleration = 0;
+                                movementComponent.AutoWalk = true;
+                                movementComponent.DistanceToChangeDirection = 0;
+                            }
+
+                            if (movementComponent.AutoWalk)
+                            {
+                                // Atualiza a velocidade aleatoriamente
+                                SetRandomMovement(movementComponent);
+                            }
+                        }
                     }
                     else
                     {
-                        // Atualiza a posição com base na velocidade
-                        if (movementComponent.IsMoving)
-                        {
-                            movementComponent.Position += movementComponent.Speed;
-                        }
-
-                        // Atualiza a velocidade aleatoriamente
-                        SetRandomMovement(movementComponent);
+                        movementComponent.IsMoving = false;
                     }
 
                     if (spriteComponent != null)
@@ -296,7 +372,7 @@ namespace Csharpagotchi
         }
 
         private void SetRandomMovement(MovementComponent movementComponent)
-    {
+        {
             if (movementComponent.DistanceToChangeDirection <= 0 && movementComponent.SecondsToChangeDirection <= 0)
             {
                 // Gera velocidades aleatórias
@@ -328,6 +404,7 @@ namespace Csharpagotchi
     public class InputSystem : ISystem
     {
         private Vector lastMousePosition;
+
         public void Start(List<Entity> entities, Canvas canvas)
         {
             foreach (var entity in entities)
@@ -341,7 +418,7 @@ namespace Csharpagotchi
                         lastMousePosition = actualPosition;
 
                         // Verifica se a entidade está sendo arrastada
-                        if (e.LeftButton == MouseButtonState.Pressed && inputComponent.IsGrabbing && entity.Components.Find(c => c is PhysicsComponent) is PhysicsComponent physicsComponent && entity.Components.Find(c => c is SpriteComponent) is SpriteComponent spriteComponent2)
+                        if (e.LeftButton == MouseButtonState.Pressed && inputComponent.IsGrabbing && entity.Components.Find(c => c is PhysicsComponent) is PhysicsComponent physicsComponent)
                         {
                             // Define que a entidade está se movendo
                             if (entity.Components.Find(c => c is MovementComponent) is MovementComponent movementComponent)
@@ -393,7 +470,6 @@ namespace Csharpagotchi
                         {
                             if (entity.Components.Find(c => c is PhysicsComponent) is PhysicsComponent physicsComponent)
                             {
-                                physicsComponent.Enabled = false;
                                 physicsComponent.Direction = 0;
                             }
 
@@ -482,7 +558,7 @@ namespace Csharpagotchi
                         spriteComponent.PreviousIsMoving = movementComponent.IsMoving;
 
                         // Verifica se o slime está parado ou andando
-                        if (movementComponent.IsMoving)
+                        if (movementComponent.IsMoving && movementComponent.AutoWalk)
                         {
                             ImageBehavior.SetAutoStart(spriteComponent.Image, true);
                             ImageBehavior.SetAnimatedSource(spriteComponent.Image, spriteComponent.WalkSpriteBitmap);
